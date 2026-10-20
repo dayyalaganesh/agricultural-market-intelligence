@@ -6,7 +6,9 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 INPUT_FILE = PROJECT_ROOT / "data" / "raw" / "mandi_prices_raw.csv"
-OUTPUT_FILE = PROJECT_ROOT / "data" / "processed" / "mandi_prices_transformed.csv"
+OUTPUT_FILE = (
+    PROJECT_ROOT / "data" / "processed" / "mandi_prices_transformed.csv"
+)
 
 PRICE_COLUMNS = ["Min_Price", "Max_Price", "Modal_Price"]
 
@@ -17,9 +19,44 @@ COLUMN_RENAMES = {
 }
 
 
-def transform_mandi_data():
-    """Standardize columns, prices, and dates; then save processed data."""
+def standardize_columns(row):
+    """Rename price columns and trim surrounding whitespace."""
+    return {
+        COLUMN_RENAMES.get(column, column): value.strip()
+        for column, value in row.items()
+    }
 
+
+def standardize_date(date_value):
+    """Convert DD/MM/YYYY to YYYY-MM-DD."""
+    parsed_date = datetime.strptime(date_value, "%d/%m/%Y")
+    return parsed_date.strftime("%Y-%m-%d")
+
+
+def validate_and_standardize_prices(row):
+    """Validate prices and normalize their numeric representation."""
+    for column in PRICE_COLUMNS:
+        price = float(row[column])
+
+        if price < 0:
+            raise ValueError(f"Negative price in {column}: {price}")
+
+        row[column] = str(int(price)) if price.is_integer() else str(price)
+
+    return row
+
+
+def transform_row(row):
+    """Apply the transformation rules to one CSV record."""
+    transformed_row = standardize_columns(row)
+    transformed_row["Arrival_Date"] = standardize_date(
+        transformed_row["Arrival_Date"]
+    )
+    return validate_and_standardize_prices(transformed_row)
+
+
+def transform_mandi_data():
+    """Transform the raw CSV and save the processed output."""
     print("AGRICULTURAL MARKET DATA TRANSFORMATION")
     print("=" * 42)
 
@@ -48,46 +85,8 @@ def transform_mandi_data():
             writer.writeheader()
 
             for row in reader:
-                transformed_row = {
-                    COLUMN_RENAMES.get(column, column): value.strip()
-                    for column, value in row.items()
-                    if column is not None
-                }
+                transformed_row = transform_row(row)
 
-                # Standardize the date as YYYY-MM-DD.
-                try:
-                    parsed_date = datetime.strptime(
-                        transformed_row["Arrival_Date"], "%d/%m/%Y"
-                    )
-                    transformed_row["Arrival_Date"] = parsed_date.strftime(
-                        "%Y-%m-%d"
-                    )
-                except ValueError as error:
-                    raise ValueError(
-                        f"Invalid Arrival_Date: {transformed_row['Arrival_Date']}"
-                    ) from error
-
-                # Validate and normalize price fields.
-                for column in PRICE_COLUMNS:
-                    try:
-                        price = float(transformed_row[column])
-                    except (ValueError, KeyError) as error:
-                        raise ValueError(
-                            f"Invalid price in column {column}: "
-                            f"{transformed_row.get(column)}"
-                        ) from error
-
-                    if price < 0:
-                        raise ValueError(
-                            f"Negative price in {column}: {price}"
-                        )
-
-                    if price.is_integer():
-                        transformed_row[column] = str(int(price))
-                    else:
-                        transformed_row[column] = str(price)
-
-                # Skip exact duplicate rows after standardization.
                 row_key = tuple(
                     transformed_row.get(column, "")
                     for column in output_columns
