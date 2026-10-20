@@ -186,3 +186,30 @@ These results reflect the current development run. Re-run the tests and checks w
 ## Disclaimer
 
 This is an educational portfolio project. Price summaries describe the records available in the current dataset and do not establish long-term market trends.
+## PostgreSQL Query Optimization
+
+Created B-tree indexes on `market` and `state` to evaluate query performance.
+
+### Market Lookup
+
+Tested a selective query filtering by `Hosur(Uzhavar Sandhai )`.
+
+- Matching records: 64
+- Before index: sequential scan
+- After index: bitmap index scan followed by bitmap heap scan
+- Original measured execution time: 1.137 ms
+- Indexed measured execution time: 0.267 ms
+
+The indexed plan accessed 7 heap blocks for the matching records. Later warm-cache runs were faster, so these timings are illustrative rather than guaranteed performance gains.
+
+### State Lookup
+
+Tested a query filtering by `Tamil Nadu`.
+
+- Matching records: 6,527
+- PostgreSQL continued to choose a sequential scan.
+- This is reasonable because the query returns a large share of the table.
+
+The tests demonstrate that indexes should be evaluated against actual query plans and workloads rather than added indiscriminately.
+
+**Note:** Results are specific to the local dataset and environment. Execution times vary with caching and system load.
