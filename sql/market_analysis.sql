@@ -38,3 +38,37 @@ SELECT
            OR modal_price > max_price
     ) AS modal_outside_range
 FROM mandi_prices;
+-- 5. Commodity price spread
+-- Describes variation across records, not change over time
+SELECT
+    commodity,
+    COUNT(*) AS record_count,
+    ROUND(MIN(modal_price), 2) AS lowest_modal_price,
+    ROUND(MAX(modal_price), 2) AS highest_modal_price,
+    ROUND(MAX(modal_price) - MIN(modal_price), 2) AS modal_price_spread
+FROM mandi_prices
+GROUP BY commodity
+HAVING COUNT(*) >= 2
+ORDER BY modal_price_spread DESC
+LIMIT 10;
+
+
+-- 6. State-level market coverage
+SELECT
+    state,
+    COUNT(DISTINCT market) AS market_count,
+    COUNT(DISTINCT commodity) AS commodity_count,
+    COUNT(*) AS record_count
+FROM mandi_prices
+GROUP BY state
+ORDER BY record_count DESC;
+
+
+-- 7. Dataset profile
+SELECT
+    COUNT(*) AS total_records,
+    COUNT(DISTINCT state) AS distinct_states,
+    COUNT(DISTINCT market) AS distinct_markets,
+    COUNT(DISTINCT commodity) AS distinct_commodities,
+    COUNT(DISTINCT arrival_date) AS distinct_arrival_dates
+FROM mandi_prices;
