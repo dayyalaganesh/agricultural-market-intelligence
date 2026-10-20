@@ -1,26 +1,31 @@
 # Agricultural Market Intelligence Platform
 
-A Python and PostgreSQL data engineering project that ingests, transforms, validates, and analyzes agricultural market price data from Indian mandis.
+An end-to-end data engineering project that ingests, transforms, validates, and loads Indian agricultural market price data into PostgreSQL for SQL-based analysis.
 
 ## Project Overview
 
-This project demonstrates an end-to-end data processing workflow for agricultural commodity prices. It converts raw CSV data into a standardized format, validates data quality, stores structured records in PostgreSQL, and enables SQL-based market analysis.
+This project demonstrates a batch data pipeline built with Python and PostgreSQL. It processes agricultural commodity prices from mandi markets, applies data-quality checks, and stores structured records for analysis.
+
+**Current dataset:** 10,797 records
+**Pipeline:** CSV → Ingestion → Transformation → Validation → PostgreSQL → SQL Analytics
 
 ## Key Features
 
-- **Data Ingestion:** Checks input file availability and validates the expected CSV schema.
-- **Data Transformation:** Standardizes column names, normalizes arrival dates, validates prices, and removes duplicate rows.
-- **Data Validation:** Checks for missing values, duplicate records, invalid dates, negative prices, and price-range inconsistencies.
-- **Database Storage:** Loads transformed agricultural market data into PostgreSQL.
-- **SQL Analytics:** Analyzes average modal prices by commodity and market.
-- **Unit Testing:** Includes automated tests for transformation functions.
+- **Data Ingestion:** Checks source-file availability and validates the expected CSV schema.
+- **Data Transformation:** Standardizes column names and dates, validates prices, and removes duplicate rows.
+- **Data Quality:** Checks missing values, duplicate records, invalid dates, negative or non-finite prices, and inconsistent price ranges.
+- **PostgreSQL Loading:** Loads records into a temporary staging table, verifies record counts, and supports a transactional full refresh.
+- **Safe Dry Run:** Tests the staging process without modifying the target table by default.
+- **SQL Analytics:** Includes queries for commodity and market price analysis.
+- **Automated Testing:** Includes transformation and validation tests.
 
 ## Technology Stack
 
-- **Programming:** Python
-- **Data Processing:** CSV-based ingestion and transformation
+- **Language:** Python
 - **Database:** PostgreSQL
-- **Query Language:** SQL
+- **Data Processing:** Python CSV module
+- **SQL:** PostgreSQL SQL
+- **Database Driver:** Psycopg 3
 - **Testing:** Python `unittest`
 - **Version Control:** Git and GitHub
 - **Environment:** Ubuntu on WSL
@@ -32,9 +37,10 @@ This project demonstrates an end-to-end data processing workflow for agricultura
 - **Portal:** [data.gov.in — Mandi Prices](https://www.data.gov.in/catalog/current-daily-price-various-commodities-various-markets-mandi)
 - **Format:** CSV
 - **Raw file:** `data/raw/mandi_prices_raw.csv`
-- **Records processed:** 10,797
+- **Processed file:** `data/processed/mandi_prices_transformed.csv`
+- **Records:** 10,797
 
-The dataset structure and sample records match the official dataset description. The exact download provenance has not yet been independently confirmed.
+The project currently contains one distinct arrival date. Its results describe the available snapshot and should not be interpreted as long-term price trends. The exact provenance of the downloaded CSV has not yet been independently confirmed.
 
 ## Project Structure
 
@@ -44,7 +50,6 @@ agricultural-market-intelligence/
 │   ├── raw/
 │   ├── processed/
 │   └── quality_reports/
-├── logs/
 ├── sql/
 │   └── market_analysis.sql
 ├── src/
@@ -52,78 +57,132 @@ agricultural-market-intelligence/
 │   │   └── ingest_mandi_data.py
 │   ├── transformation/
 │   │   └── transform_mandi_data.py
-│   └── validation/
-│       └── validate_mandi_data.py
+│   ├── validation/
+│   │   └── validate_mandi_data.py
+│   └── loading/
+│       └── load_mandi_data.py
 ├── tests/
-│   └── test_transform_mandi_data.py
+│   ├── test_transform_mandi_data.py
+│   └── test_validate_mandi_data.py
 ├── .gitignore
 └── README.md
 ```
 
 ## Data Pipeline
 
-1. **Ingest:** Verify the input CSV and its expected schema.
-2. **Transform:** Standardize columns and dates, validate prices, and remove duplicate rows.
-3. **Validate:** Run data-quality checks on the dataset.
-4. **Load:** Import transformed records into PostgreSQL.
-5. **Analyze:** Execute SQL queries to summarize commodity and market prices.
+1. **Ingest:** Check that the raw CSV exists and has the expected columns.
+2. **Transform:** Standardize column names and dates, validate prices, and remove duplicate records.
+3. **Validate:** Run data-quality checks and generate a quality report.
+4. **Stage:** Load transformed records into a temporary PostgreSQL staging table.
+5. **Verify:** Confirm that the staged record count matches the source record count.
+6. **Load:** Optionally refresh the target table inside a transaction.
+7. **Analyze:** Run SQL queries to examine commodity and market prices.
 
-## PostgreSQL Setup
+## Setup
 
-Create a database named `agricultural_market_intelligence` and a table named `mandi_prices` with columns matching the transformed CSV schema.
-
-After creating the table, load the processed CSV from the project root:
+### 1. Clone the repository
 
 ```bash
-sudo -u postgres psql -d agricultural_market_intelligence \
-  -c "\copy mandi_prices FROM 'data/processed/mandi_prices_transformed.csv' WITH (FORMAT csv, HEADER true)"
+git clone https://github.com/dayyalaganesh/agricultural-market-intelligence.git
+cd agricultural-market-intelligence
 ```
 
-Verify the imported record count:
+### 2. Create and activate a virtual environment
 
 ```bash
-sudo -u postgres psql -d agricultural_market_intelligence \
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+### 3. Install dependencies
+
+```bash
+python -m pip install "psycopg[binary]"
+```
+
+### 4. Configure PostgreSQL
+
+Create a PostgreSQL database named `agricultural_market_intelligence` and a `mandi_prices` table with these columns:
+
+| Column | PostgreSQL type |
+|---|---|
+| state | text |
+| district | text |
+| market | text |
+| commodity | text |
+| variety | text |
+| grade | text |
+| arrival_date | date |
+| min_price | numeric(12,2) |
+| max_price | numeric(12,2) |
+| modal_price | numeric(12,2) |
+
+The loader connects using the local PostgreSQL role `ganesh` by default. Configure an appropriate local role and database permissions for your environment. Do not commit passwords or other credentials.
+
+### 5. Run the pipeline
+
+Run these commands from the project root:
+
+```bash
+python src/ingestion/ingest_mandi_data.py
+python src/transformation/transform_mandi_data.py
+python src/validation/validate_mandi_data.py
+python -m unittest discover -s tests -v
+```
+
+Ensure the transformed CSV exists before loading.
+
+### 6. Test the PostgreSQL loader safely
+
+The default mode is a dry run. It stages the records and verifies the count without refreshing the target table.
+
+```bash
+python src/loading/load_mandi_data.py
+```
+
+To apply a full refresh after reviewing the source and confirming that replacement is intended:
+
+```bash
+python src/loading/load_mandi_data.py --apply
+```
+
+**Warning:** `--apply` replaces all records in `public.mandi_prices` with the processed CSV contents. Run it only when a full refresh is intended. The transaction rolls back if an error occurs before commit.
+
+### 7. Verify the loaded records
+
+```bash
+psql -d agricultural_market_intelligence \
   -c "SELECT COUNT(*) FROM mandi_prices;"
 ```
 
-Expected record count for the current dataset: `10797`.
+Expected count for the current dataset: `10797`.
 
-## Run the Project
-
-Execute the scripts from the project root:
+### 8. Run SQL analytics
 
 ```bash
-python3 src/ingestion/ingest_mandi_data.py
-python3 src/transformation/transform_mandi_data.py
-python3 src/validation/validate_mandi_data.py
-python3 -m unittest discover -s tests -v
-```
-
-Run the SQL analytics after PostgreSQL is configured and the data has been loaded:
-
-```bash
-sudo -u postgres psql -d agricultural_market_intelligence \
+psql -d agricultural_market_intelligence \
   -f sql/market_analysis.sql
 ```
 
-## Current Implementation Status
+## Verified Results
 
-- CSV ingestion and schema validation implemented.
-- Data transformation implemented.
-- Six transformation unit tests passing.
-- Data-quality validation implemented.
-- PostgreSQL table created and 10,797 records imported.
-- SQL analytics queries saved in `sql/market_analysis.sql`.
-- Git version history maintained in GitHub.
+- 10,797 source records read.
+- 10,797 records loaded into the staging table during the successful dry run.
+- Existing table remained unchanged during the dry run.
+- 10,797 records present after the successful PostgreSQL refresh.
+- Sample database records returned correctly typed dates and numeric prices.
+- 17 transformation and validation tests had passed in the development environment.
+
+These results reflect the current development run. Re-run the tests and checks when changing the code or dataset.
 
 ## Future Enhancements
 
-- Automate ingestion and transformation with Apache Airflow.
-- Add incremental ingestion and scheduled pipeline execution.
-- Integrate additional verified agricultural market datasets.
-- Develop richer analytical reports and visualizations.
-- Explore cloud storage and deployment.
+- Schedule the pipeline with Apache Airflow.
+- Add incremental ingestion and idempotent load strategies.
+- Add database constraints and stronger automated integration tests.
+- Integrate additional verified market datasets with multiple dates.
+- Build visual analytics and explore cloud deployment.
 
 ## Disclaimer
 
-This project is for educational and portfolio purposes. Price summaries describe the available dataset and should not be interpreted as long-term market trends. The current dataset contains one distinct arrival date.
+This is an educational portfolio project. Price summaries describe the records available in the current dataset and do not establish long-term market trends.
