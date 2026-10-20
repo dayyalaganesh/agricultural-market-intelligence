@@ -43,8 +43,16 @@ agricultural-market-intelligence/
 ```
 
 ## Data Sources
-Agricultural market price datasets will be documented here with their source URLs, access dates, and applicable usage terms.
 
+### Agricultural Market Prices
+
+- **Dataset:** Current Daily Price of Various Commodities from Various Markets (Mandi)
+- **Publisher:** Ministry of Agriculture and Farmers Welfare, Government of India
+- **Data source:** AGMARKNET
+- **Official portal:** https://www.data.gov.in/catalog/current-daily-price-various-commodities-various-markets-mandi
+- **Local file:** `data/raw/mandi_prices_raw.csv`
+- **Format:** CSV
+- **Verification status:** Dataset structure and sample records match the official dataset description; the exact download provenance has not yet been independently confirmed.
 ## Future Enhancements
 - Automated data quality tests
 - Scheduled ingestion workflows
